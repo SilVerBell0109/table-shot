@@ -1,0 +1,53 @@
+import Foundation
+import CoreGraphics
+
+/// 캡처 핵심 로직. 프레임 획득 → PNG 인코딩 → 클립보드 복사(먼저) → 저장.
+public final class CaptureService {
+    private let frameProvider: () -> CGImage?
+    private let fileWriter: FileWriting
+    private let clipboard: Clipboarding
+    private let settings: SettingsStore
+    private let clock: CaptureClock
+
+    public init(
+        frameProvider: @escaping () -> CGImage?,
+        fileWriter: FileWriting,
+        clipboard: Clipboarding,
+        settings: SettingsStore,
+        clock: CaptureClock
+    ) {
+        self.frameProvider = frameProvider
+        self.fileWriter = fileWriter
+        self.clipboard = clipboard
+        self.settings = settings
+        self.clock = clock
+    }
+
+    /// 캡처를 수행하고 저장된 파일 URL을 반환한다.
+    @discardableResult
+    public func capture() throws -> URL {
+        guard let image = frameProvider() else { throw CaptureError.noFrame }
+        guard let data = PngEncoder.encode(image) else { throw CaptureError.encodeFailed }
+
+        // 저장이 실패하더라도 클립보드 복사는 먼저 수행한다.
+        clipboard.writePNG(data)
+
+        let folder = settings.saveFolderURL
+        let url = folder.appendingPathComponent(filename())
+        do {
+            try fileWriter.ensureFolder(folder)
+            try fileWriter.write(data, to: url)
+        } catch {
+            throw CaptureError.saveFailed
+        }
+        return url
+    }
+
+    private func filename() -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone.current
+        fmt.dateFormat = "yyyyMMdd-HHmmss"
+        return "desk-\(fmt.string(from: clock.now())).png"
+    }
+}

@@ -1,0 +1,105 @@
+import XCTest
+import CoreGraphics
+@testable import DeskShotKit
+
+// MARK: - 테스트 더블
+
+private final class FileSpy: FileWriting {
+    var ensuredFolders: [URL] = []
+    var writtenURLs: [URL] = []
+    var failOnWrite = false
+    var anyWrite: Bool { !writtenURLs.isEmpty }
+
+    func ensureFolder(_ url: URL) throws { ensuredFolders.append(url) }
+    func write(_ data: Data, to url: URL) throws {
+        if failOnWrite { throw CaptureError.saveFailed }
+        writtenURLs.append(url)
+    }
+    func wrote(to url: URL) -> Bool { writtenURLs.contains(url) }
+}
+
+private final class ClipSpy: Clipboarding {
+    var called = false
+    func writePNG(_ data: Data) { called = true }
+}
+
+private struct FixedClock: CaptureClock {
+    let date: Date
+    func now() -> Date { date }
+}
+
+final class CaptureServiceTests: XCTestCase {
+    private func make1x1CGImage() -> CGImage {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        return ctx.makeImage()!
+    }
+
+    private func makeSettings(folder: String) -> SettingsStore {
+        let s = SettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        s.saveFolderURL = URL(fileURLWithPath: folder)
+        return s
+    }
+
+    // 2026-11-03 17:19:00 로컬 시각
+    private func fixedDate() -> Date {
+        var c = DateComponents()
+        c.year = 2026; c.month = 11; c.day = 3
+        c.hour = 17; c.minute = 19; c.second = 0
+        return Calendar(identifier: .gregorian).date(from: c)!
+    }
+
+    func test_capture_savesAndCopies_returnsExpectedURL() throws {
+        let fileSpy = FileSpy(); let clipSpy = ClipSpy()
+        let settings = makeSettings(folder: "/tmp/ds")
+        let img = make1x1CGImage()
+        let sut = CaptureService(
+            frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: settings, clock: FixedClock(date: fixedDate()))
+
+        let url = try sut.capture()
+
+        XCTAssertEqual(url.lastPathComponent, "desk-20261103-171900.png")
+        XCTAssertTrue(fileSpy.wrote(to: url))
+        XCTAssertTrue(clipSpy.called)
+    }
+
+    func test_capture_noFrame_throws() {
+        let fileSpy = FileSpy(); let clipSpy = ClipSpy()
+        let sut = CaptureService(
+            frameProvider: { nil }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: makeSettings(folder: "/tmp/ds"), clock: FixedClock(date: fixedDate()))
+
+        XCTAssertThrowsError(try sut.capture()) { XCTAssertEqual($0 as? CaptureError, .noFrame) }
+        XCTAssertFalse(fileSpy.anyWrite)
+        XCTAssertFalse(clipSpy.called)
+    }
+
+    func test_capture_saveFailure_stillCopiesClipboard() {
+        let fileSpy = FileSpy(); fileSpy.failOnWrite = true
+        let clipSpy = ClipSpy()
+        let img = make1x1CGImage()
+        let sut = CaptureService(
+            frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: makeSettings(folder: "/tmp/ds"), clock: FixedClock(date: fixedDate()))
+
+        XCTAssertThrowsError(try sut.capture()) { XCTAssertEqual($0 as? CaptureError, .saveFailed) }
+        XCTAssertTrue(clipSpy.called) // 저장 실패해도 클립보드는 시도됨
+    }
+
+    func test_capture_createsFolderIfMissing() throws {
+        let fileSpy = FileSpy(); let clipSpy = ClipSpy()
+        let settings = makeSettings(folder: "/tmp/ds")
+        let img = make1x1CGImage()
+        let sut = CaptureService(
+            frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: settings, clock: FixedClock(date: fixedDate()))
+
+        _ = try sut.capture()
+
+        XCTAssertTrue(fileSpy.ensuredFolders.contains(settings.saveFolderURL))
+    }
+}
