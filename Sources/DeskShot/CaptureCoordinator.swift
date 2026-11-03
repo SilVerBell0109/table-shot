@@ -37,9 +37,20 @@ final class CaptureCoordinator: ObservableObject {
 
     private func giveSuccessFeedback() {
         // 셔터음 + 화면 가장자리 플래시
-        NSSound(named: "Grab")?.play()
+        Self.shutterSound?.play()
         EdgeFlash.flash()
     }
+
+    // NSSound(named: "Grab")은 앱 번들/표준 Sounds 폴더만 검색하므로 nil이 된다.
+    // 스크린샷 셔터음(Grab.aif)을 절대 경로로 로드하고, 없으면 Pop으로 대체한다.
+    private static let shutterSound: NSSound? = {
+        let grab = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Grab.aif"
+        if FileManager.default.fileExists(atPath: grab),
+           let s = NSSound(contentsOfFile: grab, byReference: true) {
+            return s
+        }
+        return NSSound(named: "Pop")
+    }()
 
     private static func message(for error: Error) -> String {
         switch error as? CaptureError {

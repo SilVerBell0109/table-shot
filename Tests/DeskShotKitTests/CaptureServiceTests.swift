@@ -8,6 +8,7 @@ private final class FileSpy: FileWriting {
     var ensuredFolders: [URL] = []
     var writtenURLs: [URL] = []
     var failOnWrite = false
+    var existingPaths: Set<String> = []
     var anyWrite: Bool { !writtenURLs.isEmpty }
 
     func ensureFolder(_ url: URL) throws { ensuredFolders.append(url) }
@@ -15,6 +16,7 @@ private final class FileSpy: FileWriting {
         if failOnWrite { throw CaptureError.saveFailed }
         writtenURLs.append(url)
     }
+    func fileExists(at url: URL) -> Bool { existingPaths.contains(url.path) }
     func wrote(to url: URL) -> Bool { writtenURLs.contains(url) }
 }
 
@@ -88,6 +90,21 @@ final class CaptureServiceTests: XCTestCase {
 
         XCTAssertThrowsError(try sut.capture()) { XCTAssertEqual($0 as? CaptureError, .saveFailed) }
         XCTAssertTrue(clipSpy.called) // 저장 실패해도 클립보드는 시도됨
+    }
+
+    func test_capture_whenFileExists_dedupesFilename() throws {
+        let fileSpy = FileSpy(); let clipSpy = ClipSpy()
+        let settings = makeSettings(folder: "/tmp/ds")
+        fileSpy.existingPaths = ["/tmp/ds/desk-20261103-171900.png"]
+        let img = make1x1CGImage()
+        let sut = CaptureService(
+            frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: settings, clock: FixedClock(date: fixedDate()))
+
+        let url = try sut.capture()
+
+        XCTAssertEqual(url.lastPathComponent, "desk-20261103-171900-2.png")
+        XCTAssertTrue(fileSpy.wrote(to: url))
     }
 
     func test_capture_createsFolderIfMissing() throws {

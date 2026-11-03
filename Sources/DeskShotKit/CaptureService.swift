@@ -33,7 +33,7 @@ public final class CaptureService {
         clipboard.writePNG(data)
 
         let folder = settings.saveFolderURL
-        let url = folder.appendingPathComponent(filename())
+        let url = uniqueURL(in: folder, base: timestamp())
         do {
             try fileWriter.ensureFolder(folder)
             try fileWriter.write(data, to: url)
@@ -43,11 +43,23 @@ public final class CaptureService {
         return url
     }
 
-    private func filename() -> String {
+    private func timestamp() -> String {
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "en_US_POSIX")
         fmt.timeZone = TimeZone.current
         fmt.dateFormat = "yyyyMMdd-HHmmss"
-        return "desk-\(fmt.string(from: clock.now())).png"
+        return fmt.string(from: clock.now())
+    }
+
+    /// 같은 초에 여러 번 찍어도 덮어쓰지 않도록 중복 시 -2, -3… 접미사를 붙인다.
+    private func uniqueURL(in folder: URL, base: String) -> URL {
+        let first = folder.appendingPathComponent("desk-\(base).png")
+        guard fileWriter.fileExists(at: first) else { return first }
+        var n = 2
+        while true {
+            let candidate = folder.appendingPathComponent("desk-\(base)-\(n).png")
+            if !fileWriter.fileExists(at: candidate) { return candidate }
+            n += 1
+        }
     }
 }

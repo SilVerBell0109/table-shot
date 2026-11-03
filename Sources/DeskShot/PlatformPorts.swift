@@ -10,6 +10,9 @@ struct FileManagerWriter: FileWriting {
     func write(_ data: Data, to url: URL) throws {
         try data.write(to: url, options: .atomic)
     }
+    func fileExists(at url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path)
+    }
 }
 
 /// NSPasteboard 기반 클립보드 포트. PNG 데이터와 NSImage를 모두 기록해 호환성을 높인다.

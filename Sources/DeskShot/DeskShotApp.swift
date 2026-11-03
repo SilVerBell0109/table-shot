@@ -16,10 +16,10 @@ struct DeskShotApp: App {
                 }
                 Button("찍기") { appModel.coordinator?.trigger() }
                     .keyboardShortcut("2", modifiers: [.command, .shift])
-                Button("미리보기 열기") { openWindow(id: "preview") }
+                Button("미리보기 열기") { activate(); openWindow(id: "preview") }
                 Button("저장 폴더 열기") { appModel.openSaveFolder() }
                 Divider()
-                Button("설정…") { openWindow(id: "settings") }
+                SettingsLink { Text("설정…") }
                 Divider()
                 Button("종료") { NSApplication.shared.terminate(nil) }
             } else {
@@ -39,18 +39,18 @@ struct DeskShotApp: App {
         }
         .windowResizability(.contentMinSize)
 
-        Window("DeskShot 설정", id: "settings") {
+        Settings {
             if let settingsModel = appModel.settingsModel {
                 SettingsView(model: settingsModel)
+            } else {
+                EmptyView()
             }
         }
-        .windowResizability(.contentSize)
+    }
 
-        Window("DeskShot", id: "unsupported") {
-            if !appModel.isSupported {
-                UnsupportedView()
-            }
-        }
+    /// LSUIElement 앱은 openWindow만으로 앞으로 오지 않으므로 명시적으로 활성화한다.
+    private func activate() {
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -68,8 +68,10 @@ final class AppModel: ObservableObject {
 
     init() {
         detectSupport()
-        guard isSupported else { return }
-        requestCameraAccess()
+        guard isSupported else {
+            presentUnsupportedAlert()
+            return
+        }
 
         let camera = CameraManager()
         let coordinator = CaptureCoordinator(camera: camera, settings: settings)
@@ -77,10 +79,12 @@ final class AppModel: ObservableObject {
         self.coordinator = coordinator
         self.settingsModel = SettingsModel(store: settings)
 
-        camera.start()
         hotkey.register(settings.hotkey) { [weak coordinator] in
             Task { @MainActor in coordinator?.trigger() }
         }
+
+        // 카메라는 권한이 확정된 뒤에만 시작한다. (미승인 상태로 세션을 켜면 프레임이 오지 않음)
+        startCameraWhenAuthorized()
     }
 
     private func detectSupport() {
@@ -92,16 +96,36 @@ final class AppModel: ObservableObject {
         isSupported = isDeskViewSupported(availableDeviceTypeIDs: typeIDs)
     }
 
-    private func requestCameraAccess() {
+    private func startCameraWhenAuthorized() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             cameraAuthorized = true
+            camera?.start()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                Task { @MainActor in self?.cameraAuthorized = granted }
+                Task { @MainActor in
+                    self?.cameraAuthorized = granted
+                    if granted { self?.camera?.start() }   // 승인 직후에 시작(재실행 불필요)
+                }
             }
         default:
             cameraAuthorized = false
+        }
+    }
+
+    private func presentUnsupportedAlert() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "데스크 뷰를 사용할 수 없습니다"
+            alert.informativeText = """
+            DeskShot은 데스크 뷰(Desk View) 카메라가 있는 맥에서만 동작합니다.
+            12MP 센터 스테이지 내장 카메라를 갖춘 M4 이상 맥북 에어/프로, iMac(2024)에서 사용하세요.
+            """
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "종료")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+            NSApplication.shared.terminate(nil)
         }
     }
 

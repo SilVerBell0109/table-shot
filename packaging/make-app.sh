@@ -23,5 +23,10 @@ cp "$BIN_PATH" "$APP/Contents/MacOS/$BIN_NAME"
 chmod +x "$APP/Contents/MacOS/$BIN_NAME"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 
+# ad-hoc 서명: 번들에 안정적인 코드 서명 신원을 부여해 재빌드마다 카메라 권한(TCC)이
+# 초기화되는 것을 막는다. (배포 서명이 아니므로 첫 실행은 여전히 우클릭→열기)
+echo "==> ad-hoc 코드 서명"
+codesign --force --deep --sign - "$APP"
+
 echo "==> 완료: $(pwd)/$APP"
 echo "    첫 실행: Finder에서 $APP 우클릭 → 열기 → '열기' 확인"
