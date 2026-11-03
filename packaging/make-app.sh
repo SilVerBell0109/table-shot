@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# DeskShot.app 번들을 조립한다. (서명 없음 — 첫 실행 시 우클릭→열기)
+# Table_shot.app 번들을 조립한다. (서명 없음 — 첫 실행 시 우클릭→열기)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP="DeskShot.app"
-BIN_NAME="DeskShot"
+APP="Table_shot.app"
+BIN_NAME="DeskShot"   # 실행파일/번들 내부 이름(CFBundleExecutable)은 유지한다
 
 echo "==> swift build -c release"
 swift build -c release

@@ -8,7 +8,7 @@ struct DeskShotApp: App {
     @StateObject private var appModel = AppModel()
 
     var body: some Scene {
-        MenuBarExtra("DeskShot", systemImage: "camera.viewfinder") {
+        MenuBarExtra("Table_shot", systemImage: "camera.viewfinder") {
             if appModel.isSupported {
                 if !appModel.cameraAuthorized {
                     Button("카메라 권한이 필요합니다 — 시스템 설정 열기") { appModel.openCameraSettings() }
@@ -94,7 +94,7 @@ final class AppModel: ObservableObject {
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 520),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false)
-            window.title = "DeskShot 미리보기"
+            window.title = "Table_shot 미리보기"
             window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false
             window.center()
@@ -136,7 +136,7 @@ final class AppModel: ObservableObject {
             let alert = NSAlert()
             alert.messageText = "데스크 뷰를 사용할 수 없습니다"
             alert.informativeText = """
-            DeskShot은 데스크 뷰(Desk View) 카메라가 있는 맥에서만 동작합니다.
+            Table_shot은 데스크 뷰(Desk View) 카메라가 있는 맥에서만 동작합니다.
             12MP 센터 스테이지 내장 카메라를 갖춘 M4 이상 맥북 에어/프로, iMac(2024)에서 사용하세요.
             """
             alert.alertStyle = .warning

@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>DeskShot</string>
+    <string>Table_shot</string>
     <key>CFBundleDisplayName</key>
-    <string>DeskShot</string>
+    <string>Table_shot</string>
     <key>CFBundleIdentifier</key>
     <string>com.silverbell.deskshot</string>
     <key>CFBundleExecutable</key>
