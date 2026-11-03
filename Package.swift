@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "DeskShotKit"),
+        .executableTarget(name: "DeskShot", dependencies: ["DeskShotKit"]),
         .testTarget(name: "DeskShotKitTests", dependencies: ["DeskShotKit"]),
     ]
 )
