@@ -16,3 +16,6 @@ DerivedData/
 # App artifacts
 *.app
 *.zip
+
+# SDD workspace (ledger/briefs — scratch)
+.superpowers/
