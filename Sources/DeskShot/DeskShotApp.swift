@@ -1,11 +1,11 @@
 import SwiftUI
+import AppKit
 import AVFoundation
 import DeskShotKit
 
 @main
 struct DeskShotApp: App {
     @StateObject private var appModel = AppModel()
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         MenuBarExtra("DeskShot", systemImage: "camera.viewfinder") {
@@ -16,7 +16,8 @@ struct DeskShotApp: App {
                 }
                 Button("찍기") { appModel.coordinator?.trigger() }
                     .keyboardShortcut("2", modifiers: [.command, .shift])
-                Button("미리보기 열기") { activate(); openWindow(id: "preview") }
+                Button("미리보기 열기") { appModel.showPreview() }
+                Button("데스크 뷰 영역 맞추기…") { appModel.openDeskViewSetup() }
                 Button("저장 폴더 열기") { appModel.openSaveFolder() }
                 Divider()
                 SettingsLink { Text("설정…") }
@@ -29,16 +30,6 @@ struct DeskShotApp: App {
             }
         }
 
-        Window("DeskShot 미리보기", id: "preview") {
-            if appModel.isSupported, let camera = appModel.camera {
-                PreviewWindow(
-                    previewLayer: camera.previewLayer,
-                    onCapture: { appModel.coordinator?.trigger() })
-                .onAppear { camera.start() }
-            }
-        }
-        .windowResizability(.contentMinSize)
-
         Settings {
             if let settingsModel = appModel.settingsModel {
                 SettingsView(model: settingsModel)
@@ -46,11 +37,6 @@ struct DeskShotApp: App {
                 EmptyView()
             }
         }
-    }
-
-    /// LSUIElement 앱은 openWindow만으로 앞으로 오지 않으므로 명시적으로 활성화한다.
-    private func activate() {
-        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -73,7 +59,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        let camera = CameraManager()
+        let camera = CameraManager(rotationDegrees: settings.rotationDegrees)
         let coordinator = CaptureCoordinator(camera: camera, settings: settings)
         self.camera = camera
         self.coordinator = coordinator
@@ -85,6 +71,38 @@ final class AppModel: ObservableObject {
 
         // 카메라는 권한이 확정된 뒤에만 시작한다. (미승인 상태로 세션을 켜면 프레임이 오지 않음)
         startCameraWhenAuthorized()
+
+        // 실행 직후 미리보기를 자동으로 띄운다. (NSApp 기동 뒤로 미룬다)
+        DispatchQueue.main.async { [weak self] in self?.showPreview() }
+    }
+
+    // 미리보기는 LSUIElement 앱에서 SwiftUI Window 씬이 자동으로 뜨지 않으므로
+    // AppKit NSWindow로 직접 관리한다. 하나만 만들어 두고 재사용한다.
+    private var previewWindow: NSWindow?
+
+    /// 미리보기 창을 띄우거나(없으면 생성) 앞으로 가져온다. 카메라 세션도 시작한다.
+    func showPreview() {
+        guard isSupported, let camera else { return }
+        if previewWindow == nil {
+            let view = PreviewWindow(
+                previewLayer: camera.previewLayer,
+                onCapture: { [weak self] in self?.coordinator?.trigger() },
+                onRotate: { [weak self] in self?.rotatePreview() },
+                onAdjustArea: { [weak self] in self?.openDeskViewSetup() },
+                onOpenFolder: { [weak self] in self?.openLastCaptureFolder() })
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered, defer: false)
+            window.title = "DeskShot 미리보기"
+            window.contentView = NSHostingView(rootView: view)
+            window.isReleasedWhenClosed = false
+            window.center()
+            previewWindow = window
+        }
+        camera.start()
+        NSApp.activate(ignoringOtherApps: true)
+        previewWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func detectSupport() {
@@ -135,9 +153,49 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // 데스크 뷰 영역(사다리꼴)은 코드로 지정할 수 없다. 애플 데스크 뷰 앱의 설정 모드를
+    // 띄워, 사용자가 책상 영역에 사다리꼴을 직접 맞추게 한다. (선택 영역은 시스템에 저장됨)
+    private var deskViewApp: AVCaptureDeskViewApplication?
+
+    /// "데스크 뷰 영역 맞추기": 애플 데스크 뷰 설정 모드를 연다.
+    func openDeskViewSetup() {
+        let app = AVCaptureDeskViewApplication()
+        self.deskViewApp = app   // present가 비동기이므로 강한 참조를 유지한다.
+        let config = AVCaptureDeskViewApplication.LaunchConfiguration()
+        config.requiresSetUpModeCompletion = true
+        NSApp.activate(ignoringOtherApps: true)
+        app.present(launchConfiguration: config) { [weak self] error in
+            Task { @MainActor in
+                if let error {
+                    self?.coordinator?.lastErrorMessage =
+                        "데스크 뷰 설정을 열 수 없습니다: \(error.localizedDescription)"
+                }
+                self?.deskViewApp = nil
+            }
+        }
+    }
+
+    /// 미리보기 "회전" 버튼: 90°씩 돌려 설정에 저장하고, 미리보기·캡처에 즉시 반영한다.
+    func rotatePreview() {
+        let next = SettingsStore.normalizedRotation(settings.rotationDegrees + 90)
+        settings.rotationDegrees = next
+        camera?.applyRotation(next)
+    }
+
     func openSaveFolder() {
         let url = settings.saveFolderURL
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         NSWorkspace.shared.open(url)
+    }
+
+    /// 미리보기 "폴더 열기": 방금 찍은 이미지가 든 (시각 이름의) 폴더에서 그 파일을 선택해 연다.
+    /// 아직 캡처가 없으면 기본 저장 폴더를 연다.
+    func openLastCaptureFolder() {
+        if let last = coordinator?.lastSavedURL,
+           FileManager.default.fileExists(atPath: last.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([last])
+        } else {
+            openSaveFolder()
+        }
     }
 }

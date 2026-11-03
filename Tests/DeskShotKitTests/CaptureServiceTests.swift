@@ -69,6 +69,23 @@ final class CaptureServiceTests: XCTestCase {
         XCTAssertTrue(clipSpy.called)
     }
 
+    // 각 캡처는 "캡처 시각(연도+월일+시분초)"으로 이름 붙인 전용 하위 폴더에 저장된다.
+    // 미리보기 "폴더 열기"가 바로 이 폴더로 이동한다.
+    func test_capture_savesIntoTimestampNamedSubfolder() throws {
+        let fileSpy = FileSpy(); let clipSpy = ClipSpy()
+        let settings = makeSettings(folder: "/tmp/ds")
+        let img = make1x1CGImage()
+        let sut = CaptureService(
+            frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: settings, clock: FixedClock(date: fixedDate()))
+
+        let url = try sut.capture()
+
+        let folder = url.deletingLastPathComponent()
+        XCTAssertEqual(folder.lastPathComponent, "20261103-171900")
+        XCTAssertEqual(folder.deletingLastPathComponent().path, "/tmp/ds")
+    }
+
     func test_capture_noFrame_throws() {
         let fileSpy = FileSpy(); let clipSpy = ClipSpy()
         let sut = CaptureService(
@@ -95,7 +112,7 @@ final class CaptureServiceTests: XCTestCase {
     func test_capture_whenFileExists_dedupesFilename() throws {
         let fileSpy = FileSpy(); let clipSpy = ClipSpy()
         let settings = makeSettings(folder: "/tmp/ds")
-        fileSpy.existingPaths = ["/tmp/ds/desk-20261103-171900.png"]
+        fileSpy.existingPaths = ["/tmp/ds/20261103-171900/desk-20261103-171900.png"]
         let img = make1x1CGImage()
         let sut = CaptureService(
             frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
@@ -117,6 +134,7 @@ final class CaptureServiceTests: XCTestCase {
 
         _ = try sut.capture()
 
-        XCTAssertTrue(fileSpy.ensuredFolders.contains(settings.saveFolderURL))
+        let expected = settings.saveFolderURL.appendingPathComponent("20261103-171900")
+        XCTAssertTrue(fileSpy.ensuredFolders.contains(expected))
     }
 }

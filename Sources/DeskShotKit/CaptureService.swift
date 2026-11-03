@@ -32,8 +32,11 @@ public final class CaptureService {
         // 저장이 실패하더라도 클립보드 복사는 먼저 수행한다.
         clipboard.writePNG(data)
 
-        let folder = settings.saveFolderURL
-        let url = uniqueURL(in: folder, base: timestamp())
+        // 캡처마다 "캡처 시각"으로 이름 붙인 전용 하위 폴더에 저장한다.
+        // (미리보기 "폴더 열기"가 바로 이 폴더로 이동한다)
+        let stamp = timestamp()
+        let folder = settings.saveFolderURL.appendingPathComponent(stamp)
+        let url = uniqueURL(in: folder, base: stamp)
         do {
             try fileWriter.ensureFolder(folder)
             try fileWriter.write(data, to: url)

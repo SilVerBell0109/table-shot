@@ -24,6 +24,16 @@ public final class SettingsStore {
         static let saveFolderPath = "saveFolderPath"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
+        static let rotationDegrees = "rotationDegrees"
+    }
+
+    /// 기본 미리보기/캡처 회전각(도). 데스크 뷰는 보통 상하가 뒤집혀 들어오므로 180°.
+    public static let defaultRotationDegrees = 180
+
+    /// 임의의 각도를 0/90/180/270 중 가장 가까운 값으로 정규화한다(음수·360 이상도 감싼다).
+    public static func normalizedRotation(_ degrees: Int) -> Int {
+        let quarters = Int((Double(degrees) / 90.0).rounded())
+        return (((quarters % 4) + 4) % 4) * 90
     }
 
     public init(defaults: UserDefaults) {
@@ -57,6 +67,19 @@ public final class SettingsStore {
         set {
             defaults.set(Int(newValue.keyCode), forKey: Key.hotkeyKeyCode)
             defaults.set(Int(newValue.modifiers), forKey: Key.hotkeyModifiers)
+        }
+    }
+
+    /// 미리보기·저장 PNG에 적용할 회전각(도). 0/90/180/270으로 정규화되어 저장된다. 기본 180°.
+    public var rotationDegrees: Int {
+        get {
+            guard defaults.object(forKey: Key.rotationDegrees) != nil else {
+                return Self.defaultRotationDegrees
+            }
+            return Self.normalizedRotation(defaults.integer(forKey: Key.rotationDegrees))
+        }
+        set {
+            defaults.set(Self.normalizedRotation(newValue), forKey: Key.rotationDegrees)
         }
     }
 

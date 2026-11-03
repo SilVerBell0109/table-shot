@@ -29,4 +29,32 @@ final class SettingsStoreTests: XCTestCase {
         SettingsStore(defaults: d).hotkey = custom
         XCTAssertEqual(SettingsStore(defaults: d).hotkey, custom)
     }
+
+    func test_defaultRotation_is180() {
+        let s = SettingsStore(defaults: makeEphemeralDefaults())
+        XCTAssertEqual(s.rotationDegrees, 180)
+    }
+
+    func test_persistsRotation() {
+        let d = makeEphemeralDefaults()
+        SettingsStore(defaults: d).rotationDegrees = 90
+        XCTAssertEqual(SettingsStore(defaults: d).rotationDegrees, 90)
+    }
+
+    func test_rotationIsNormalizedToQuarterTurns() {
+        let d = makeEphemeralDefaults()
+        let s = SettingsStore(defaults: d)
+        s.rotationDegrees = 450          // 450 → 90
+        XCTAssertEqual(s.rotationDegrees, 90)
+        s.rotationDegrees = -90          // -90 → 270
+        XCTAssertEqual(s.rotationDegrees, 270)
+    }
+
+    func test_normalizedRotation_snapsAndWraps() {
+        XCTAssertEqual(SettingsStore.normalizedRotation(0), 0)
+        XCTAssertEqual(SettingsStore.normalizedRotation(270 + 90), 0)   // 360 → 0
+        XCTAssertEqual(SettingsStore.normalizedRotation(-90), 270)
+        XCTAssertEqual(SettingsStore.normalizedRotation(44), 0)         // snap to nearest 90
+        XCTAssertEqual(SettingsStore.normalizedRotation(46), 90)
+    }
 }

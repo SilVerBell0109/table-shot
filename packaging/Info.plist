@@ -18,8 +18,8 @@
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSCameraUsageDescription</key>
     <string>데스크 뷰 카메라로 책상 위 종이나 아이패드를 캡처하기 위해 카메라를 사용합니다.</string>
     <key>NSHighResolutionCapable</key>
