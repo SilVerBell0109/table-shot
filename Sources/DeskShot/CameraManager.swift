@@ -139,21 +139,26 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
                                        format: .RGBA8, colorSpace: cs)
     }
 
-    /// 문서 가독성 보정: 데스크 뷰의 평탄화로 흐려진 책/문서 글자를 또렷하게 만든다.
-    /// 1) 대비를 올려 연한 글자를 진하게, 2) 언샤프 마스크로 글자 윤곽을 살린다.
-    /// 언샤프 마스크는 단순 선명화(CISharpenLuminance)보다 글자 에지에 훨씬 효과적이라
-    /// 스캔 앱들이 쓰는 방식이다. 반경·세기는 1920×1440 본문 글자에 맞춰 튜닝했다.
+    /// 문서 가독성 보정: 데스크 뷰의 평탄화·과노출로 흐려진 책/문서 글자를 또렷하게 만든다.
+    /// 1) 톤 커브로 과노출로 떠버린 연한 회색 글자를 진하게 끌어내리고,
+    /// 2) 언샤프 마스크로 글자 윤곽을 살린다.
+    /// 예전엔 CIColorControls 대비를 올렸지만, 그 대비는 중간회색(0.5) '위쪽'을
+    /// 더 밝게 만들어 흰 종이 위 연한 글자(0.7~0.85)를 오히려 하얗게 날려버렸다.
+    /// 문서 캡처에는 밝은 회색만 눌러 주는 톤 커브가 맞다. (검정·흰 종이는 그대로)
     private func enhancedForDocuments(_ image: CIImage) -> CIImage {
-        // 1) 대비↑·밝기 미세 조정으로 회색 글자를 진하게.
-        let toned = image.applyingFilter("CIColorControls", parameters: [
-            kCIInputContrastKey: 1.18,
-            kCIInputBrightnessKey: -0.01,
-            kCIInputSaturationKey: 1.0,
+        // 1) 톤 커브: 검정(0)·흰 종이(1.0)는 유지하고, 중간~밝은 회색만 아래로 눌러
+        //    과노출로 떠버린 연한 글자를 다시 진하게 만든다.
+        let toned = image.applyingFilter("CIToneCurve", parameters: [
+            "inputPoint0": CIVector(x: 0.00, y: 0.00),
+            "inputPoint1": CIVector(x: 0.25, y: 0.16),
+            "inputPoint2": CIVector(x: 0.50, y: 0.38),
+            "inputPoint3": CIVector(x: 0.75, y: 0.58),
+            "inputPoint4": CIVector(x: 1.00, y: 1.00),
         ])
-        // 2) 언샤프 마스크로 글자 윤곽을 또렷하게. 반경 2.5 / 세기 0.9.
+        // 2) 언샤프 마스크로 글자 윤곽을 또렷하게. 반경 2.2 / 세기 1.0.
         let sharpened = toned.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: 2.5,
-            kCIInputIntensityKey: 0.9,
+            kCIInputRadiusKey: 2.2,
+            kCIInputIntensityKey: 1.0,
         ])
         // 필터가 extent를 넓힐 수 있으므로 원본 영역으로 다시 자른다.
         return sharpened.cropped(to: image.extent)
