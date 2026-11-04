@@ -34,11 +34,16 @@ public final class CaptureService {
         // 저장이 실패하더라도 클립보드 복사는 먼저 수행한다.
         clipboard.writePNG(data)
 
-        // 단발 캡처는 "캡처 시각"으로 이름 붙인 전용 하위 폴더에 저장한다.
-        // (미리보기 "폴더 열기"가 바로 이 폴더로 이동한다)
-        // 자동 캡처는 지정된 세션 폴더(subfolder)에 모은다.
+        // 단발 캡처는 하위 폴더 없이 저장 폴더에 바로 저장한다.
+        // (미리보기 "폴더 열기"는 저장 폴더에서 그 파일을 선택해 연다)
+        // 자동 캡처만 지정된 세션 폴더(subfolder)에 모은다.
         let stamp = timestamp()
-        let folder = settings.saveFolderURL.appendingPathComponent(subfolder ?? stamp)
+        let folder: URL
+        if let subfolder {
+            folder = settings.saveFolderURL.appendingPathComponent(subfolder)
+        } else {
+            folder = settings.saveFolderURL
+        }
         let url = uniqueURL(in: folder, base: stamp)
         do {
             try fileWriter.ensureFolder(folder)

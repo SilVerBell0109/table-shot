@@ -69,9 +69,9 @@ final class CaptureServiceTests: XCTestCase {
         XCTAssertTrue(clipSpy.called)
     }
 
-    // 각 캡처는 "캡처 시각(연도+월일+시분초)"으로 이름 붙인 전용 하위 폴더에 저장된다.
-    // 미리보기 "폴더 열기"가 바로 이 폴더로 이동한다.
-    func test_capture_savesIntoTimestampNamedSubfolder() throws {
+    // 단발 캡처는 하위 폴더를 만들지 않고 저장 폴더에 바로 저장한다.
+    // (미리보기 "폴더 열기"는 저장 폴더에서 그 파일을 선택해 연다)
+    func test_capture_savesDirectlyInSaveFolder() throws {
         let fileSpy = FileSpy(); let clipSpy = ClipSpy()
         let settings = makeSettings(folder: "/tmp/ds")
         let img = make1x1CGImage()
@@ -82,8 +82,8 @@ final class CaptureServiceTests: XCTestCase {
         let url = try sut.capture()
 
         let folder = url.deletingLastPathComponent()
-        XCTAssertEqual(folder.lastPathComponent, "20261103-171900")
-        XCTAssertEqual(folder.deletingLastPathComponent().path, "/tmp/ds")
+        XCTAssertEqual(folder.path, "/tmp/ds")   // 하위 폴더 없음
+        XCTAssertEqual(url.lastPathComponent, "desk-20261103-171900.png")
     }
 
     // 자동(연속) 캡처: subfolder를 주면 그 세션 폴더 하나에 모아 저장한다.
@@ -131,7 +131,7 @@ final class CaptureServiceTests: XCTestCase {
     func test_capture_whenFileExists_dedupesFilename() throws {
         let fileSpy = FileSpy(); let clipSpy = ClipSpy()
         let settings = makeSettings(folder: "/tmp/ds")
-        fileSpy.existingPaths = ["/tmp/ds/20261103-171900/desk-20261103-171900.png"]
+        fileSpy.existingPaths = ["/tmp/ds/desk-20261103-171900.png"]
         let img = make1x1CGImage()
         let sut = CaptureService(
             frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
@@ -143,7 +143,7 @@ final class CaptureServiceTests: XCTestCase {
         XCTAssertTrue(fileSpy.wrote(to: url))
     }
 
-    func test_capture_createsFolderIfMissing() throws {
+    func test_capture_createsSaveFolderIfMissing() throws {
         let fileSpy = FileSpy(); let clipSpy = ClipSpy()
         let settings = makeSettings(folder: "/tmp/ds")
         let img = make1x1CGImage()
@@ -153,7 +153,7 @@ final class CaptureServiceTests: XCTestCase {
 
         _ = try sut.capture()
 
-        let expected = settings.saveFolderURL.appendingPathComponent("20261103-171900")
-        XCTAssertTrue(fileSpy.ensuredFolders.contains(expected))
+        // 단발 캡처는 저장 폴더 자체만 보장한다(하위 폴더 생성 없음).
+        XCTAssertTrue(fileSpy.ensuredFolders.contains(settings.saveFolderURL))
     }
 }
