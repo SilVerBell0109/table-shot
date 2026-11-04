@@ -30,9 +30,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore(defaults: d).hotkey, custom)
     }
 
-    func test_defaultRotation_is180() {
+    func test_defaultRotation_isZero() {
         let s = SettingsStore(defaults: makeEphemeralDefaults())
-        XCTAssertEqual(s.rotationDegrees, 180)
+        XCTAssertEqual(s.rotationDegrees, 0)
     }
 
     func test_persistsRotation() {

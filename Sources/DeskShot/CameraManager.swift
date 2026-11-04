@@ -89,17 +89,27 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         applyRotation(rotationDegrees)
     }
 
-    /// 미리보기 레이어와 캡처 출력 양쪽 연결에 회전을 적용한다.
-    /// 둘을 함께 돌려야 화면과 저장되는 PNG가 같은 방향이 된다.
+    /// 회전을 적용한다. 미리보기는 레이어 연결로 돌리고,
+    /// 저장되는 PNG는 latestFrame()에서 소프트웨어로 같은 각도만큼 돌린다.
+    /// (데스크 뷰의 캡처 출력 연결은 videoRotationAngle을 반영하지 않아,
+    ///  출력 연결만 믿으면 저장본이 회전되지 않는다.)
     func applyRotation(_ degrees: Int) {
         rotationDegrees = degrees
         let angle = CGFloat(degrees)
-        for connection in [previewLayer.connection, output.connection(with: .video)] {
-            guard let connection else { continue }
-            if connection.isVideoRotationAngleSupported(angle) {
-                connection.videoRotationAngle = angle
-            }
+        if let connection = previewLayer.connection,
+           connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
         }
+    }
+
+    /// CIImage를 시계방향 degrees만큼 돌리고 원점을 (0,0)으로 당긴다.
+    private func rotated(_ image: CIImage, degrees: Int) -> CIImage {
+        let normalized = ((degrees % 360) + 360) % 360
+        guard normalized != 0 else { return image }
+        let radians = -CGFloat(normalized) * .pi / 180   // CI는 양수가 반시계 → 시계방향은 음수
+        let r = image.transformed(by: CGAffineTransform(rotationAngle: radians))
+        return r.transformed(by: CGAffineTransform(translationX: -r.extent.origin.x,
+                                                   y: -r.extent.origin.y))
     }
 
     func stop() {
@@ -120,9 +130,28 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         frameLock.unlock()
         guard let buffer, age <= maxFrameAge else { return nil }
         let ciImage = CIImage(cvPixelBuffer: buffer)
+        // 저장본은 여기서 설정된 각도만큼 소프트웨어로 회전시킨다.
+        let oriented = rotated(ciImage, degrees: rotationDegrees)
+        // 문서/책 글자가 또렷하게 보이도록 대비·선명도를 살짝 올린다.
+        let enhanced = enhancedForDocuments(oriented)
         let cs = CGColorSpace(name: CGColorSpace.sRGB)
-        return ciContext.createCGImage(ciImage, from: ciImage.extent,
+        return ciContext.createCGImage(enhanced, from: oriented.extent,
                                        format: .RGBA8, colorSpace: cs)
+    }
+
+    /// 문서 가독성 보정: 연한 회색 글자를 진하게(대비↑·밝기 약간↓), 윤곽을 또렷하게(선명도↑).
+    /// 데스크 뷰의 평탄화로 흐려진 글자를 읽기 쉽게 만든다. 과하지 않게 약하게 적용한다.
+    private func enhancedForDocuments(_ image: CIImage) -> CIImage {
+        let contrasted = image.applyingFilter("CIColorControls", parameters: [
+            kCIInputContrastKey: 1.12,
+            kCIInputBrightnessKey: -0.02,
+            kCIInputSaturationKey: 1.0,
+        ])
+        let sharpened = contrasted.applyingFilter("CISharpenLuminance", parameters: [
+            kCIInputSharpnessKey: 0.45,
+        ])
+        // 필터가 extent를 넓힐 수 있으므로 원본 영역으로 다시 자른다.
+        return sharpened.cropped(to: image.extent)
     }
 
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate

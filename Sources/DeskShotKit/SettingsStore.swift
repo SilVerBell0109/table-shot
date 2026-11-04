@@ -27,8 +27,10 @@ public final class SettingsStore {
         static let rotationDegrees = "rotationDegrees"
     }
 
-    /// 기본 미리보기/캡처 회전각(도). 데스크 뷰는 보통 상하가 뒤집혀 들어오므로 180°.
-    public static let defaultRotationDegrees = 180
+    /// 기본 미리보기/캡처 회전각(도). 사용자가 보는 방향으로 둔 책상 위 문서는
+    /// 데스크 뷰 원본에서 이미 바로 선 상태로 들어오므로 0°(회전 없음)가 기본이다.
+    /// (화면이 뒤집혀 보이면 미리보기의 "회전" 버튼으로 90°씩 돌려 설정에 저장한다.)
+    public static let defaultRotationDegrees = 0
 
     /// 임의의 각도를 0/90/180/270 중 가장 가까운 값으로 정규화한다(음수·360 이상도 감싼다).
     public static func normalizedRotation(_ degrees: Int) -> Int {
@@ -70,7 +72,7 @@ public final class SettingsStore {
         }
     }
 
-    /// 미리보기·저장 PNG에 적용할 회전각(도). 0/90/180/270으로 정규화되어 저장된다. 기본 180°.
+    /// 미리보기·저장 PNG에 적용할 회전각(도). 0/90/180/270으로 정규화되어 저장된다. 기본 0°.
     public var rotationDegrees: Int {
         get {
             guard defaults.object(forKey: Key.rotationDegrees) != nil else {
