@@ -86,6 +86,25 @@ final class CaptureServiceTests: XCTestCase {
         XCTAssertEqual(folder.deletingLastPathComponent().path, "/tmp/ds")
     }
 
+    // 자동(연속) 캡처: subfolder를 주면 그 세션 폴더 하나에 모아 저장한다.
+    // (3초 간격 버스트 한 세션의 사진들이 흩어지지 않게)
+    func test_capture_withSubfolder_savesIntoThatSubfolder() throws {
+        let fileSpy = FileSpy(); let clipSpy = ClipSpy()
+        let settings = makeSettings(folder: "/tmp/ds")
+        let img = make1x1CGImage()
+        let sut = CaptureService(
+            frameProvider: { img }, fileWriter: fileSpy, clipboard: clipSpy,
+            settings: settings, clock: FixedClock(date: fixedDate()))
+
+        let url = try sut.capture(subfolder: "burst-20261103-171900")
+
+        let folder = url.deletingLastPathComponent()
+        XCTAssertEqual(folder.lastPathComponent, "burst-20261103-171900")
+        XCTAssertEqual(folder.deletingLastPathComponent().path, "/tmp/ds")
+        XCTAssertEqual(url.lastPathComponent, "desk-20261103-171900.png")
+        XCTAssertTrue(fileSpy.wrote(to: url))
+    }
+
     func test_capture_noFrame_throws() {
         let fileSpy = FileSpy(); let clipSpy = ClipSpy()
         let sut = CaptureService(

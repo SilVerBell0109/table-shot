@@ -31,7 +31,9 @@ struct PreviewLayerView: NSViewRepresentable {
 /// 라이브 미리보기 + 큰 "찍기" 버튼.
 struct PreviewWindow: View {
     let previewLayer: AVCaptureVideoPreviewLayer
+    @ObservedObject var coordinator: CaptureCoordinator
     let onCapture: () -> Void
+    let onToggleInterval: () -> Void
     let onRotate: () -> Void
     let onAdjustArea: () -> Void
     let onOpenFolder: () -> Void
@@ -50,6 +52,17 @@ struct PreviewWindow: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+
+                Button(action: onToggleInterval) {
+                    Label(coordinator.isIntervalRunning ? "자동 중지" : "자동 캡처",
+                          systemImage: coordinator.isIntervalRunning ? "stop.circle.fill" : "timer")
+                        .font(.title2)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(coordinator.isIntervalRunning ? .red : nil)
+                .help("3초마다 1장씩 자동으로 찍습니다. 사진은 한 폴더(burst-…)에 모입니다. 다시 누르면 멈춥니다")
 
                 Button(action: onAdjustArea) {
                     Label("영역 맞추기", systemImage: "crop")

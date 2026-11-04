@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVFoundation
+import Combine
 import DeskShotKit
 
 @main
@@ -16,6 +17,11 @@ struct DeskShotApp: App {
                 }
                 Button("찍기") { appModel.coordinator?.trigger() }
                     .keyboardShortcut("2", modifiers: [.command, .shift])
+                Button(appModel.coordinator?.isIntervalRunning == true
+                       ? "자동 캡처 중지 (3초 간격)"
+                       : "자동 캡처 시작 (3초마다 1장)") {
+                    appModel.coordinator?.toggleInterval()
+                }
                 Button("미리보기 열기") { appModel.showPreview() }
                 Button("데스크 뷰 영역 맞추기…") { appModel.openDeskViewSetup() }
                 Button("저장 폴더 열기") { appModel.openSaveFolder() }
@@ -51,6 +57,7 @@ final class AppModel: ObservableObject {
     private(set) var settingsModel: SettingsModel?
     private let hotkey = HotkeyManager()
     private let settings = SettingsStore(defaults: .standard)
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         detectSupport()
@@ -64,6 +71,11 @@ final class AppModel: ObservableObject {
         self.camera = camera
         self.coordinator = coordinator
         self.settingsModel = SettingsModel(store: settings)
+
+        // coordinator의 상태 변화(자동 캡처 시작/중지 등)를 메뉴·미리보기가 반영하도록 재발행한다.
+        coordinator.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
 
         hotkey.register(settings.hotkey) { [weak coordinator] in
             Task { @MainActor in coordinator?.trigger() }
@@ -83,10 +95,12 @@ final class AppModel: ObservableObject {
     /// 미리보기 창을 띄우거나(없으면 생성) 앞으로 가져온다. 카메라 세션도 시작한다.
     func showPreview() {
         guard isSupported, let camera else { return }
-        if previewWindow == nil {
+        if previewWindow == nil, let coordinator {
             let view = PreviewWindow(
                 previewLayer: camera.previewLayer,
+                coordinator: coordinator,
                 onCapture: { [weak self] in self?.coordinator?.trigger() },
+                onToggleInterval: { [weak self] in self?.coordinator?.toggleInterval() },
                 onRotate: { [weak self] in self?.rotatePreview() },
                 onAdjustArea: { [weak self] in self?.openDeskViewSetup() },
                 onOpenFolder: { [weak self] in self?.openLastCaptureFolder() })

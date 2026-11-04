@@ -8,9 +8,18 @@ import DeskShotKit
 final class CaptureCoordinator: ObservableObject {
     @Published var lastSavedURL: URL?
     @Published var lastErrorMessage: String?
+    /// 자동(연속) 캡처가 동작 중인지. 메뉴·버튼 레이블이 이 값을 따른다.
+    @Published private(set) var isIntervalRunning = false
 
     private let camera: CameraManager
     private let service: CaptureService
+
+    /// 자동 캡처 간격(초). 요구사항: 3초마다 1장.
+    static let intervalSeconds: TimeInterval = 3
+
+    private var intervalTimer: Timer?
+    /// 이번 자동 캡처 세션의 사진을 모을 폴더 이름.
+    private var intervalFolder: String?
 
     init(camera: CameraManager, settings: SettingsStore) {
         self.camera = camera
@@ -22,23 +31,68 @@ final class CaptureCoordinator: ObservableObject {
             clock: SystemClock())
     }
 
-    /// 세 경로 공통 진입점.
+    /// 세 경로(핫키·메뉴바·버튼) 공통 단발 캡처 진입점.
     func trigger() {
+        performCapture(subfolder: nil, playSound: true)
+    }
+
+    /// 자동 캡처 토글. 동작 중이면 멈추고, 아니면 시작한다.
+    func toggleInterval() {
+        isIntervalRunning ? stopInterval() : startInterval()
+    }
+
+    /// 자동 캡처 시작: 즉시 1장 찍고 이후 intervalSeconds마다 1장씩.
+    func startInterval() {
+        guard !isIntervalRunning else { return }
+        camera.start()   // 프레임이 필요하므로 세션을 확실히 켠다.
+        // 이번 세션 사진을 모을 폴더 이름을 한 번만 정한다.
+        intervalFolder = "burst-" + Self.folderStamp()
+        isIntervalRunning = true
+
+        // 첫 장은 바로 찍고(셔터음 1회), 이후는 소리 없이 조용히 반복한다.
+        performCapture(subfolder: intervalFolder, playSound: true)
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.intervalSeconds, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.intervalTick() }
+        }
+        intervalTimer = timer
+    }
+
+    /// 자동 캡처 중지.
+    func stopInterval() {
+        intervalTimer?.invalidate()
+        intervalTimer = nil
+        intervalFolder = nil
+        isIntervalRunning = false
+    }
+
+    private func intervalTick() {
+        guard isIntervalRunning else { return }
+        // 반복 중엔 셔터음 없이 가장자리 플래시로만 알린다(3초마다 울리면 거슬림).
+        performCapture(subfolder: intervalFolder, playSound: false)
+    }
+
+    private func performCapture(subfolder: String?, playSound: Bool) {
         do {
-            let url = try service.capture()
+            let url = try service.capture(subfolder: subfolder)
             lastSavedURL = url
             lastErrorMessage = nil
-            giveSuccessFeedback()
+            if playSound { Self.shutterSound?.play() }
+            EdgeFlash.flash()
         } catch {
             lastErrorMessage = Self.message(for: error)
             NSSound.beep()
+            // 자동 캡처 중 오류가 나면(예: 프레임 없음) 계속 삑삑대지 않도록 멈춘다.
+            if isIntervalRunning { stopInterval() }
         }
     }
 
-    private func giveSuccessFeedback() {
-        // 셔터음 + 화면 가장자리 플래시
-        Self.shutterSound?.play()
-        EdgeFlash.flash()
+    /// 자동 캡처 세션 폴더 이름에 쓸 시각 문자열.
+    private static func folderStamp() -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = .current
+        fmt.dateFormat = "yyyyMMdd-HHmmss"
+        return fmt.string(from: Date())
     }
 
     // NSSound(named: "Grab")은 앱 번들/표준 Sounds 폴더만 검색하므로 nil이 된다.

@@ -24,18 +24,21 @@ public final class CaptureService {
     }
 
     /// 캡처를 수행하고 저장된 파일 URL을 반환한다.
+    /// - Parameter subfolder: 저장할 하위 폴더 이름. nil이면 캡처 시각으로 폴더를 만든다.
+    ///   자동(연속) 캡처는 세션 폴더 이름(예: "burst-…")을 넘겨 한 폴더에 모은다.
     @discardableResult
-    public func capture() throws -> URL {
+    public func capture(subfolder: String? = nil) throws -> URL {
         guard let image = frameProvider() else { throw CaptureError.noFrame }
         guard let data = PngEncoder.encode(image) else { throw CaptureError.encodeFailed }
 
         // 저장이 실패하더라도 클립보드 복사는 먼저 수행한다.
         clipboard.writePNG(data)
 
-        // 캡처마다 "캡처 시각"으로 이름 붙인 전용 하위 폴더에 저장한다.
+        // 단발 캡처는 "캡처 시각"으로 이름 붙인 전용 하위 폴더에 저장한다.
         // (미리보기 "폴더 열기"가 바로 이 폴더로 이동한다)
+        // 자동 캡처는 지정된 세션 폴더(subfolder)에 모은다.
         let stamp = timestamp()
-        let folder = settings.saveFolderURL.appendingPathComponent(stamp)
+        let folder = settings.saveFolderURL.appendingPathComponent(subfolder ?? stamp)
         let url = uniqueURL(in: folder, base: stamp)
         do {
             try fileWriter.ensureFolder(folder)
