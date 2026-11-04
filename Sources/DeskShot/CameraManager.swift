@@ -139,16 +139,21 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
                                        format: .RGBA8, colorSpace: cs)
     }
 
-    /// 문서 가독성 보정: 연한 회색 글자를 진하게(대비↑·밝기 약간↓), 윤곽을 또렷하게(선명도↑).
-    /// 데스크 뷰의 평탄화로 흐려진 글자를 읽기 쉽게 만든다. 과하지 않게 약하게 적용한다.
+    /// 문서 가독성 보정: 데스크 뷰의 평탄화로 흐려진 책/문서 글자를 또렷하게 만든다.
+    /// 1) 대비를 올려 연한 글자를 진하게, 2) 언샤프 마스크로 글자 윤곽을 살린다.
+    /// 언샤프 마스크는 단순 선명화(CISharpenLuminance)보다 글자 에지에 훨씬 효과적이라
+    /// 스캔 앱들이 쓰는 방식이다. 반경·세기는 1920×1440 본문 글자에 맞춰 튜닝했다.
     private func enhancedForDocuments(_ image: CIImage) -> CIImage {
-        let contrasted = image.applyingFilter("CIColorControls", parameters: [
-            kCIInputContrastKey: 1.12,
-            kCIInputBrightnessKey: -0.02,
+        // 1) 대비↑·밝기 미세 조정으로 회색 글자를 진하게.
+        let toned = image.applyingFilter("CIColorControls", parameters: [
+            kCIInputContrastKey: 1.18,
+            kCIInputBrightnessKey: -0.01,
             kCIInputSaturationKey: 1.0,
         ])
-        let sharpened = contrasted.applyingFilter("CISharpenLuminance", parameters: [
-            kCIInputSharpnessKey: 0.45,
+        // 2) 언샤프 마스크로 글자 윤곽을 또렷하게. 반경 2.5 / 세기 0.9.
+        let sharpened = toned.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: 2.5,
+            kCIInputIntensityKey: 0.9,
         ])
         // 필터가 extent를 넓힐 수 있으므로 원본 영역으로 다시 자른다.
         return sharpened.cropped(to: image.extent)
